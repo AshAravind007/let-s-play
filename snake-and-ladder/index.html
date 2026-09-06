@@ -3,21 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Snakes & Ladders — Let's Play</title>
+  <title>Snakes & Ladders — Multiplayer</title>
   <link rel="stylesheet" href="../style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
   <style>
     .game-layout {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 32px;
-      padding: 32px 20px;
-      max-width: 1200px;
+      gap: 28px;
+      padding: 24px 16px;
+      max-width: 1100px;
       margin: 0 auto;
     }
     .board-container {
       width: 100%;
-      max-width: 560px;
+      max-width: 520px;
       aspect-ratio: 1;
       display: grid;
       grid-template-columns: repeat(10, 1fr);
@@ -35,105 +42,129 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 4px;
-      font-size: 0.75rem;
+      padding: 3px;
+      font-size: 0.72rem;
       font-weight: 600;
       color: var(--text-secondary);
       position: relative;
     }
     .tile.ladder { background: rgba(16, 185, 129, 0.2); border: 1px dashed var(--green); }
     .tile.snake { background: rgba(239, 68, 68, 0.2); border: 1px dashed var(--red); }
-    
     .player-token {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      display: inline-block;
-      box-shadow: 0 0 8px rgba(0,0,0,0.8);
       position: absolute;
-      bottom: 4px;
-      transition: all 0.4s ease;
+      bottom: 3px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.8);
+      transition: all 0.3s ease;
     }
-    .token-p1 { background: #3b82f6; left: 4px; }
-    .token-p2 { background: #ec4899; right: 4px; }
-
-    .hud-panel {
-      flex: 1;
-      min-width: 280px;
-      max-width: 360px;
-      padding: 24px;
+    .token-p1 { background: #3b82f6; left: 3px; }
+    .token-p2 { background: #ec4899; right: 3px; }
+    
+    /* Lobby Overlay */
+    .lobby-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 26, 0.95);
+      backdrop-filter: blur(8px);
       display: flex;
-      flex-direction: column;
-      gap: 20px;
-      height: fit-content;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
     }
-    .status-badge {
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 0.9rem;
+    .lobby-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      padding: 32px;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 420px;
       text-align: center;
-      background: rgba(99, 102, 241, 0.15);
-      color: var(--accent);
     }
   </style>
 </head>
 <body>
 
+  <!-- LOBBY SCREEN -->
+  <div id="lobbyScreen" class="lobby-overlay">
+    <div class="lobby-card">
+      <span style="font-size: 3rem;">🪜</span>
+      <h2 style="margin: 12px 0 6px;">Snakes & Ladders</h2>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:24px;">Multiplayer Room Lobby</p>
+
+      <button id="btnCreate" class="btn btn-primary full-width" style="margin-bottom: 16px;">Create New Room</button>
+
+      <div style="margin: 12px 0; color:var(--text-secondary); font-size: 0.85rem;">— OR JOIN WITH CODE —</div>
+
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="inputRoomCode" class="input-field" placeholder="ROOM CODE (e.g. A9B2)" style="text-transform:uppercase; text-align:center; font-weight:700; letter-spacing:2px;" />
+        <button id="btnJoin" class="btn btn-secondary">Join</button>
+      </div>
+
+      <div id="lobbyError" style="color:var(--red); font-size:0.85rem; margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- GAME INTERFACE -->
   <div class="game-layout">
-    <!-- 1-100 SERPENTINE BOARD -->
     <div id="board" class="board-container"></div>
 
-    <!-- CONTROLS & HUD -->
-    <div class="glass-panel hud-panel">
+    <div class="glass-panel hud-panel" style="flex:1; min-width:280px; max-width:360px; padding:24px;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="font-size:1.25rem;">Snakes & Ladders</h2>
-        <a href="../index.html" class="link-btn" style="color:var(--text-secondary);">✕ Exit</a>
+        <div>
+          <span style="font-size:0.8rem; color:var(--text-secondary);">ROOM:</span>
+          <strong id="displayRoomCode" style="color:var(--accent); font-size:1.1rem; letter-spacing:1px;">----</strong>
+        </div>
+        <a href="../index.html" class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;">Leave</a>
       </div>
 
-      <div id="status" class="status-badge">Player 1's Turn</div>
-
-      <div style="display:flex; gap:16px; justify-content:space-around;">
-        <div>🔵 Player 1: <strong id="p1Pos">1</strong></div>
-        <div>🔴 Player 2: <strong id="p2Pos">1</strong></div>
+      <div id="turnBadge" class="status-badge" style="background:rgba(99,102,241,0.15); color:var(--accent); text-align:center; padding:10px; border-radius:8px; font-weight:700;">
+        Waiting for players...
       </div>
 
+      <div style="display:flex; justify-content:space-around;">
+        <div>🔵 You are: <strong id="yourRole">--</strong></div>
+        <div>👥 Players: <strong id="playerCount">1/2</strong></div>
+      </div>
+
+      <!-- DICE ROLLER -->
       <div id="diceSlot"></div>
 
-      <div id="gameLog" style="font-size: 0.85rem; color: var(--text-secondary); max-height: 140px; overflow-y: auto;">
-        Welcome! Roll to start your ascent.
+      <div id="gameLog" style="font-size: 0.85rem; color: var(--text-secondary); max-height: 120px; overflow-y: auto;">
+        Waiting for Room creation...
       </div>
     </div>
   </div>
 
   <script type="module">
+    import { createRoom, joinRoom, subscribeToRoom, broadcastState, getCurrentPlayer } from '../shared/network.js';
     import { Dice } from '../shared/dice.js';
 
     const JUMPS = {
-      // Ladders (Start -> End)
       4: 14, 9: 31, 20: 38, 28: 84, 40: 59, 51: 67, 63: 81, 71: 91,
-      // Snakes (Head -> Tail)
       17: 7, 54: 34, 62: 18, 64: 60, 87: 24, 93: 73, 95: 75, 99: 78
     };
 
-    let p1 = 1;
-    let p2 = 1;
-    let turn = 1; // 1 or 2
+    let p1Pos = 1;
+    let p2Pos = 1;
+    let currentTurn = 1;
+    let myPlayerNum = null;
 
-    // Construct 100 to 1 Serpentine Board
+    // 1. Build Grid
     const board = document.getElementById('board');
     function buildBoard() {
       board.innerHTML = '';
       for (let row = 9; row >= 0; row--) {
-        const isEvenRow = row % 2 === 1;
+        const isEven = row % 2 === 1;
         for (let col = 0; col < 10; col++) {
-          const num = isEvenRow ? (row * 10 + (10 - col)) : (row * 10 + (col + 1));
+          const num = isEven ? (row * 10 + (10 - col)) : (row * 10 + (col + 1));
           const tile = document.createElement('div');
           tile.id = `tile-${num}`;
           tile.className = 'tile';
           if (JUMPS[num] && JUMPS[num] > num) tile.classList.add('ladder');
           if (JUMPS[num] && JUMPS[num] < num) tile.classList.add('snake');
-
           tile.innerHTML = `<span>${num}</span>`;
           board.appendChild(tile);
         }
@@ -142,57 +173,94 @@
     }
 
     function renderTokens() {
-      document.querySelectorAll('.player-token').forEach(el => el.remove());
-      const t1 = document.getElementById(`tile-${p1}`);
-      const t2 = document.getElementById(`tile-${p2}`);
+      document.querySelectorAll('.player-token').forEach(t => t.remove());
+      const t1 = document.getElementById(`tile-${p1Pos}`);
+      const t2 = document.getElementById(`tile-${p2Pos}`);
       if (t1) t1.innerHTML += `<span class="player-token token-p1"></span>`;
       if (t2) t2.innerHTML += `<span class="player-token token-p2"></span>`;
-      document.getElementById('p1Pos').innerText = p1;
-      document.getElementById('p2Pos').innerText = p2;
     }
 
-    function log(msg) {
-      const el = document.getElementById('gameLog');
-      el.innerHTML = `<div>• ${msg}</div>` + el.innerHTML;
-    }
+    // 2. Dice Roller
+    const dice = new Dice('diceSlot', async (val) => {
+      if (currentTurn !== myPlayerNum) return;
 
-    // Attach Dice
-    const dice = new Dice('diceSlot', (val) => {
-      let currentPos = turn === 1 ? p1 : p2;
-      let target = currentPos + val;
-
-      if (target <= 100) {
-        currentPos = target;
-        log(`Player ${turn} rolled ${val} ➔ moved to ${currentPos}`);
-        
-        // Check Snake or Ladder
-        if (JUMPS[currentPos]) {
-          const jumped = JUMPS[currentPos];
-          if (jumped > currentPos) {
-            log(`🎉 Ladder climb for Player ${turn}! ${currentPos} ➔ ${jumped}`);
-          } else {
-            log(`💥 Snake bite for Player ${turn}! ${currentPos} ➔ ${jumped}`);
-          }
-          currentPos = jumped;
-        }
-      } else {
-        log(`Player ${turn} needs exact roll to finish!`);
+      let pos = myPlayerNum === 1 ? p1Pos : p2Pos;
+      if (pos + val <= 100) {
+        pos += val;
+        if (JUMPS[pos]) pos = JUMPS[pos];
       }
 
-      if (turn === 1) p1 = currentPos;
-      else p2 = currentPos;
+      const nextTurn = currentTurn === 1 ? 2 : 1;
+      const updates = {
+        turn: nextTurn,
+        "state.lastRoll": val,
+        [`state.p${myPlayerNum}`]: pos
+      };
 
-      renderTokens();
-
-      if (currentPos === 100) {
-        alert(`🏆 Player ${turn} Wins!`);
-        p1 = 1; p2 = 1;
-        renderTokens();
+      if (pos === 100) {
+        updates["state.winner"] = myPlayerNum;
       }
 
-      turn = turn === 1 ? 2 : 1;
-      document.getElementById('status').innerText = `Player ${turn}'s Turn`;
+      await broadcastState(updates);
     });
+
+    // 3. Network Room Sync
+    function handleRoomUpdate(data) {
+      if (!data) return;
+      currentTurn = data.turn;
+      document.getElementById('playerCount').innerText = `${data.playerCount || 1}/2`;
+
+      if (data.state) {
+        p1Pos = data.state.p1 || 1;
+        p2Pos = data.state.p2 || 1;
+        renderTokens();
+
+        if (data.state.winner) {
+          alert(`🏆 Player ${data.state.winner} has Won!`);
+        }
+      }
+
+      const badge = document.getElementById('turnBadge');
+      if (currentTurn === myPlayerNum) {
+        badge.innerText = "YOUR TURN! Roll Dice";
+        badge.style.color = "var(--green)";
+        dice.setDisabled(false);
+      } else {
+        badge.innerText = `Waiting for Player ${currentTurn}...`;
+        badge.style.color = "var(--text-secondary)";
+        dice.setDisabled(true);
+      }
+    }
+
+    // 4. Lobby UI Listeners
+    document.getElementById('btnCreate').onclick = async () => {
+      try {
+        const initial = { p1: 1, p2: 1, lastRoll: null };
+        const res = await createRoom("snakes", initial);
+        myPlayerNum = res.playerNumber;
+        document.getElementById('displayRoomCode').innerText = res.roomId;
+        document.getElementById('yourRole').innerText = `Player ${myPlayerNum}`;
+        document.getElementById('lobbyScreen').style.display = 'none';
+        subscribeToRoom(res.roomId, handleRoomUpdate);
+      } catch (err) {
+        document.getElementById('lobbyError').innerText = err.message;
+      }
+    };
+
+    document.getElementById('btnJoin').onclick = async () => {
+      const code = document.getElementById('inputRoomCode').value;
+      if (!code) return;
+      try {
+        const res = await joinRoom(code, {});
+        myPlayerNum = res.playerNumber;
+        document.getElementById('displayRoomCode').innerText = res.roomId;
+        document.getElementById('yourRole').innerText = `Player ${myPlayerNum}`;
+        document.getElementById('lobbyScreen').style.display = 'none';
+        subscribeToRoom(res.roomId, handleRoomUpdate);
+      } catch (err) {
+        document.getElementById('lobbyError').innerText = err.message;
+      }
+    };
 
     buildBoard();
   </script>
