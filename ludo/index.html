@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ludo Star — Let's Play</title>
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ludo-red: #ef4444;
+      --ludo-green: #10b981;
+      --ludo-yellow: #f59e0b;
+      --ludo-blue: #3b82f6;
+    }
+
+    .game-layout {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 32px;
+      padding: 32px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* 15x15 Ludo Board Grid */
+    .ludo-board {
+      width: 100%;
+      max-width: 540px;
+      aspect-ratio: 1;
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      gap: 1px;
+      background: var(--border-glass);
+      border: 3px solid var(--border-glass);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+    }
+
+    .cell {
+      background: rgba(15, 23, 42, 0.95);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Bases (6x6 corners) */
+    .base-red { grid-column: 1 / 7; grid-row: 1 / 7; background: rgba(239, 68, 68, 0.15); border: 2px solid var(--ludo-red); padding: 12px; }
+    .base-green { grid-column: 10 / 16; grid-row: 1 / 7; background: rgba(16, 185, 129, 0.15); border: 2px solid var(--ludo-green); padding: 12px; }
+    .base-blue { grid-column: 1 / 7; grid-row: 10 / 16; background: rgba(59, 130, 246, 0.15); border: 2px solid var(--ludo-blue); padding: 12px; }
+    .base-yellow { grid-column: 10 / 16; grid-row: 10 / 16; background: rgba(245, 158, 11, 0.15); border: 2px solid var(--ludo-yellow); padding: 12px; }
+
+    .base-inner {
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 10px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 12px;
+      padding: 12px;
+      place-items: center;
+    }
+
+    .home-pocket {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px dashed var(--border-glass);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Center Home (3x3 triangle center) */
+    .center-home {
+      grid-column: 7 / 10;
+      grid-row: 7 / 10;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(16, 185, 129, 0.3), rgba(245, 158, 11, 0.3), rgba(59, 130, 246, 0.3));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+    }
+
+    /* Path Track Highlights */
+    .track-red { background: rgba(239, 68, 68, 0.45) !important; }
+    .track-green { background: rgba(16, 185, 129, 0.45) !important; }
+    .track-yellow { background: rgba(245, 158, 11, 0.45) !important; }
+    .track-blue { background: rgba(59, 130, 246, 0.45) !important; }
+    .safe-spot::after {
+      content: "★";
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.9rem;
+    }
+
+    /* Interactive Tokens */
+    .token {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      z-index: 10;
+    }
+
+    .token-red { background: var(--ludo-red); }
+    .token-green { background: var(--ludo-green); }
+    .token-yellow { background: var(--ludo-yellow); }
+    .token-blue { background: var(--ludo-blue); }
+
+    .token.selectable {
+      transform: scale(1.35);
+      box-shadow: 0 0 14px #ffffff;
+      animation: pulseToken 0.7s infinite alternate ease-in-out;
+    }
+
+    @keyframes pulseToken {
+      from { transform: scale(1.2); }
+      to { transform: scale(1.45); }
+    }
+
+    /* Sidebar / HUD */
+    .hud-panel {
+      flex: 1;
+      min-width: 280px;
+      max-width: 360px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: fit-content;
+    }
+
+    .player-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
+      transition: all 0.3s ease;
+    }
+
+    .player-indicator.active {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    .p-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-layout">
+    <!-- 15x15 CSS LUDO BOARD -->
+    <div id="ludoBoard" class="ludo-board">
+      <!-- 4 Quadrant Bases -->
+      <div class="base-red">
+        <div class="base-inner">
+          <div class="home-pocket" id="pocket-red-0"></div>
+          <div class="home-pocket" id="pocket-red-1"></div>
+          <div class="home-pocket" id="pocket-red-2"></div>
+          <div class="home-pocket" id="pocket-red-3"></div>
+        </div>
+      </div>
+
+      <div class="base-green">
+        <div class="base-inner">
+          <div class="home-pocket" id="pocket-green-0"></div>
+          <div class="home-pocket" id="pocket-green-1"></div>
+          <div class="home-pocket" id="pocket-green-2"></div>
+          <div class="home-pocket" id="pocket-green-3"></div>
+        </div>
+      </div>
+
+      <div class="base-blue">
+        <div class="base-inner">
+          <div class="home-pocket" id="pocket-blue-0"></div>
+          <div class="home-pocket" id="pocket-blue-1"></div>
+          <div class="home-pocket" id="pocket-blue-2"></div>
+          <div class="home-pocket" id="pocket-blue-3"></div>
+        </div>
+      </div>
+
+      <div class="base-yellow">
+        <div class="base-inner">
+          <div class="home-pocket" id="pocket-yellow-0"></div>
+          <div class="home-pocket" id="pocket-yellow-1"></div>
+          <div class="home-pocket" id="pocket-yellow-2"></div>
+          <div class="home-pocket" id="pocket-yellow-3"></div>
+        </div>
+      </div>
+
+      <!-- Center Home Area -->
+      <div class="center-home">HOME</div>
+    </div>
+
+    <!-- SIDE PANEL & TURN HUD -->
+    <div class="glass-panel hud-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:1.25rem;">Ludo Star</h2>
+        <a href="../index.html" class="link-btn" style="color:var(--text-secondary);">✕ Exit</a>
+      </div>
+
+      <!-- PLAYER LIST -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div id="ind-red" class="player-indicator active">
+          <span class="p-dot" style="background:var(--ludo-red)"></span>
+          <span>Red Player</span>
+        </div>
+        <div id="ind-green" class="player-indicator">
+          <span class="p-dot" style="background:var(--ludo-green)"></span>
+          <span>Green Player</span>
+        </div>
+        <div id="ind-yellow" class="player-indicator">
+          <span class="p-dot" style="background:var(--ludo-yellow)"></span>
+          <span>Yellow Player</span>
+        </div>
+        <div id="ind-blue" class="player-indicator">
+          <span class="p-dot" style="background:var(--ludo-blue)"></span>
+          <span>Blue Player</span>
+        </div>
+      </div>
+
+      <!-- 3D DICE MOUNT -->
+      <div id="diceSlot"></div>
+
+      <!-- ACTIVITY LOG -->
+      <div id="gameLog" style="font-size: 0.85rem; color: var(--text-secondary); max-height: 140px; overflow-y: auto;">
+        Welcome to Ludo! Roll a 6 to bring tokens out of base.
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Dice } from '../shared/dice.js';
+
+    const PLAYERS = ['red', 'green', 'yellow', 'blue'];
+    let currentPlayerIdx = 0;
+    let currentRoll = null;
+
+    // State: -1 = Base, 0 to 50 = Main Track, 51 to 56 = Home Column, 99 = Finished Home
+    const tokens = {
+      red: [-1, -1, -1, -1],
+      green: [-1, -1, -1, -1],
+      yellow: [-1, -1, -1, -1],
+      blue: [-1, -1, -1, -1]
+    };
+
+    // 52-Cell Standard Perimeter Outer Track [col, row]
+    const trackCells = [
+      [2, 7], [3, 7], [4, 7], [5, 7], [6, 7], [7, 6], [7, 5], [7, 4], [7, 3], [7, 2], [7, 1],
+      [8, 1], [9, 1], [9, 2], [9, 3], [9, 4], [9, 5], [9, 6], [10, 7], [11, 7], [12, 7], [13, 7], [14, 7], [15, 7],
+      [15, 8], [15, 9], [14, 9], [13, 9], [12, 9], [11, 9], [10, 9], [9, 10], [9, 11], [9, 12], [9, 13], [9, 14], [9, 15],
+      [8, 15], [7, 15], [7, 14], [7, 13], [7, 12], [7, 11], [7, 10], [6, 9], [5, 9], [4, 9], [3, 9], [2, 9], [1, 9],
+      [1, 8], [1, 7]
+    ];
+
+    // Build the Grid Cells dynamically on the 15x15 board
+    const board = document.getElementById('ludoBoard');
+    function initTrack() {
+      trackCells.forEach(([col, row], idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.id = `track-${idx}`;
+        cell.style.gridColumn = col;
+        cell.style.gridRow = row;
+
+        // Safe & Start spots
+        if (idx === 0) cell.classList.add('track-red', 'safe-spot');
+        if (idx === 13) cell.classList.add('track-green', 'safe-spot');
+        if (idx === 26) cell.classList.add('track-yellow', 'safe-spot');
+        if (idx === 39) cell.classList.add('track-blue', 'safe-spot');
+        if ([8, 21, 34, 47].includes(idx)) cell.classList.add('safe-spot');
+
+        board.appendChild(cell);
+      });
+    }
+
+    function log(msg) {
+      const el = document.getElementById('gameLog');
+      el.innerHTML = `<div>• ${msg}</div>` + el.innerHTML;
+    }
+
+    // Render Tokens into Bases or onto Board
+    function renderBoard() {
+      document.querySelectorAll('.token').forEach(el => el.remove());
+
+      PLAYERS.forEach(color => {
+        tokens[color].forEach((pos, tokenIdx) => {
+          const token = document.createElement('div');
+          token.className = `token token-${color}`;
+          token.id = `token-${color}-${tokenIdx}`;
+
+          if (pos === -1) {
+            // In Base Pocket
+            const pocket = document.getElementById(`pocket-${color}-${tokenIdx}`);
+            if (pocket) pocket.appendChild(token);
+          } else if (pos < 52) {
+            // On Track
+            const cell = document.getElementById(`track-${pos}`);
+            if (cell) cell.appendChild(token);
+          }
+
+          token.addEventListener('click', () => onTokenClicked(color, tokenIdx));
+        });
+      });
+    }
+
+    // Handle Dice Roll Outcome
+    const dice = new Dice('diceSlot', (val) => {
+      currentRoll = val;
+      const color = PLAYERS[currentPlayerIdx];
+      log(`${color.toUpperCase()} rolled a ${val}!`);
+
+      const validTokens = getEligibleTokens(color, val);
+
+      if (validTokens.length === 0) {
+        log(`No valid moves for ${color}. Next turn.`);
+        nextTurn();
+      } else if (validTokens.length === 1) {
+        // Auto-move if only one valid option exists
+        moveToken(color, validTokens[0], val);
+      } else {
+        // Highlight tokens for player choice
+        log(`Select which token to advance.`);
+        dice.setDisabled(true);
+        validTokens.forEach(idx => {
+          const el = document.getElementById(`token-${color}-${idx}`);
+          if (el) el.classList.add('selectable');
+        });
+      }
+    });
+
+    function getEligibleTokens(color, roll) {
+      const eligible = [];
+      tokens[color].forEach((pos, idx) => {
+        if (pos === -1 && roll === 6) eligible.push(idx);
+        else if (pos !== -1 && pos !== 99) eligible.push(idx);
+      });
+      return eligible;
+    }
+
+    function onTokenClicked(color, tokenIdx) {
+      if (color !== PLAYERS[currentPlayerIdx] || !currentRoll) return;
+
+      const valid = getEligibleTokens(color, currentRoll);
+      if (!valid.includes(tokenIdx)) return;
+
+      // Clear selectable highlights
+      document.querySelectorAll('.token').forEach(el => el.classList.remove('selectable'));
+      moveToken(color, tokenIdx, currentRoll);
+    }
+
+    function moveToken(color, tokenIdx, roll) {
+      let pos = tokens[color][tokenIdx];
+
+      if (pos === -1) {
+        // Exit Base onto start tile
+        const startIndices = { red: 0, green: 13, yellow: 26, blue: 39 };
+        tokens[color][tokenIdx] = startIndices[color];
+        log(`${color.toUpperCase()} token launched onto track!`);
+      } else {
+        tokens[color][tokenIdx] = (pos + roll) % 52;
+        log(`${color.toUpperCase()} token moved ${roll} steps.`);
+      }
+
+      renderBoard();
+      currentRoll = null;
+
+      // Bonus roll on 6, otherwise advance turn
+      if (roll === 6) {
+        log(`Rolled a 6! Roll again.`);
+        dice.setDisabled(false);
+      } else {
+        nextTurn();
+      }
+    }
+
+    function nextTurn() {
+      currentPlayerIdx = (currentPlayerIdx + 1) % PLAYERS.length;
+      PLAYERS.forEach((c, idx) => {
+        const ind = document.getElementById(`ind-${c}`);
+        if (ind) ind.classList.toggle('active', idx === currentPlayerIdx);
+      });
+      dice.setDisabled(false);
+    }
+
+    initTrack();
+    renderBoard();
+  </script>
+</body>
+</html>
