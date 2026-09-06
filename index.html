@@ -3,102 +3,708 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Let's Play — Multiplayer Hub</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Let's Play — Multiplayer Arcade Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- PeerJS: Serverless WebRTC peer-to-peer connection -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
   <style>
-    .hero {
-      text-align: center;
-      padding: 60px 20px 40px;
+    :root {
+      --bg-main: #0a0e1a;
+      --bg-card: rgba(18, 24, 38, 0.85);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(99, 102, 241, 0.4);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --accent: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1, #a855f7);
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --blue: #3b82f6;
     }
-    .hero h1 {
-      font-size: 3rem;
-      font-weight: 800;
-      background: linear-gradient(135deg, #fff, #94a3b8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 12px;
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
+    body { background: radial-gradient(circle at 50% 0%, #171d34 0%, var(--bg-main) 75%); color: var(--text-primary); min-height: 100vh; }
+
+    .view-screen { display: none; width: 100%; }
+    .view-screen.active { display: block; animation: fadeIn 0.25s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .glass-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      transition: all 0.25s ease;
     }
-    .hero p {
-      color: var(--text-secondary);
-      font-size: 1.1rem;
-      max-width: 500px;
-      margin: 0 auto;
+    .glass-panel:hover { border-color: var(--border-glow); box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.3); }
+
+    .btn {
+      padding: 12px 24px; border-radius: 10px; font-weight: 600; font-size: 0.95rem;
+      cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s ease;
     }
-    .games-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px;
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 0 20px 60px;
-      width: 100%;
+    .btn-primary { background: var(--accent-gradient); color: #fff; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5); }
+    .btn-secondary { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--border-glass); }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+    .full-width { width: 100%; }
+
+    .hero { text-align: center; padding: 60px 20px 40px; }
+    .hero h1 { font-size: 3.2rem; font-weight: 800; background: linear-gradient(135deg, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { color: var(--text-secondary); font-size: 1.1rem; margin-top: 10px; }
+
+    .games-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; }
+    .game-card { padding: 32px; display: flex; flex-direction: column; justify-content: space-between; }
+    .game-icon { font-size: 3.5rem; margin-bottom: 20px; }
+
+    /* Modal Lobby */
+    .lobby-modal {
+      display: none; position: fixed; inset: 0; background: rgba(10, 14, 26, 0.85);
+      backdrop-filter: blur(8px); z-index: 999; align-items: center; justify-content: center; padding: 16px;
     }
-    .game-card {
-      padding: 32px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      position: relative;
-      overflow: hidden;
+    .lobby-modal.active { display: flex; }
+    .lobby-card { background: var(--bg-card); border: 1px solid var(--border-glow); padding: 32px; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; }
+
+    /* Games Header & Common */
+    .game-header { max-width: 1100px; margin: 20px auto 0; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
+    .game-layout { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px; padding: 24px 20px 40px; max-width: 1100px; margin: 0 auto; }
+    .hud-panel { flex: 1; min-width: 280px; max-width: 360px; padding: 24px; display: flex; flex-direction: column; gap: 16px; height: fit-content; }
+
+    /* Dice */
+    .dice-cube {
+      width: 64px; height: 64px; background: #fff; color: #0f172a; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 2.2rem; font-weight: 800;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35); user-select: none; margin: 0 auto 12px;
+      transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
-    .game-icon {
-      font-size: 3.5rem;
-      margin-bottom: 20px;
-      display: inline-block;
+    .dice-cube.rolling { animation: spinDice 0.6s infinite; }
+    @keyframes spinDice { 0% { transform: rotate(0deg) scale(0.9); } 50% { transform: rotate(180deg) scale(1.15); } 100% { transform: rotate(360deg) scale(0.9); } }
+
+    /* Bingo */
+    .bingo-wrapper { max-width: 480px; margin: 20px auto; padding: 0 16px; text-align: center; }
+    .letters-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+    .letter-box { font-size: 1.8rem; font-weight: 800; color: var(--text-secondary); }
+    .letter-box.active { color: var(--accent); text-shadow: 0 0 14px rgba(99, 102, 241, 0.9); }
+    .bingo-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .bingo-cell {
+      aspect-ratio: 1; background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; cursor: pointer;
     }
-    .game-title {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 8px;
+    .bingo-cell.selected { background: var(--accent-gradient); border-color: transparent; }
+
+    /* Snakes & Ladders */
+    .snakes-board {
+      width: 100%; max-width: 520px; aspect-ratio: 1; display: grid;
+      grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr); gap: 2px;
+      background: rgba(255,255,255,0.05); border: 2px solid var(--border-glass); border-radius: 12px; padding: 6px;
     }
-    .game-desc {
-      color: var(--text-secondary);
-      font-size: 0.95rem;
-      line-height: 1.5;
-      margin-bottom: 24px;
+    .tile {
+      background: rgba(30, 41, 59, 0.7); border-radius: 4px; display: flex; flex-direction: column;
+      justify-content: space-between; padding: 3px; font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); position: relative;
     }
+    .tile.ladder { background: rgba(16, 185, 129, 0.2); border: 1px dashed var(--green); }
+    .tile.snake { background: rgba(239, 68, 68, 0.2); border: 1px dashed var(--red); }
+    .player-token { width: 16px; height: 16px; border-radius: 50%; position: absolute; bottom: 3px; box-shadow: 0 0 6px rgba(0,0,0,0.8); }
+    .token-p1 { background: var(--blue); left: 3px; }
+    .token-p2 { background: #ec4899; right: 3px; }
+
+    /* Ludo */
+    .ludo-board {
+      width: 100%; max-width: 520px; aspect-ratio: 1; display: grid;
+      grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr); gap: 1px;
+      background: var(--border-glass); border: 3px solid var(--border-glass); border-radius: 12px; overflow: hidden;
+    }
+    .ludo-cell { background: rgba(15, 23, 42, 0.95); position: relative; display: flex; align-items: center; justify-content: center; }
+    .base-red { grid-column: 1 / 7; grid-row: 1 / 7; background: rgba(239, 68, 68, 0.15); border: 2px solid var(--red); padding: 10px; }
+    .base-green { grid-column: 10 / 16; grid-row: 1 / 7; background: rgba(16, 185, 129, 0.15); border: 2px solid var(--green); padding: 10px; }
+    .base-blue { grid-column: 1 / 7; grid-row: 10 / 16; background: rgba(59, 130, 246, 0.15); border: 2px solid var(--blue); padding: 10px; }
+    .base-yellow { grid-column: 10 / 16; grid-row: 10 / 16; background: rgba(245, 158, 11, 0.15); border: 2px solid var(--yellow); padding: 10px; }
+    .base-inner {
+      width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); border-radius: 8px;
+      display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 8px; padding: 8px; place-items: center;
+    }
+    .home-pocket { width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, 0.05); border: 1px dashed var(--border-glass); display: flex; align-items: center; justify-content: center; }
+    .center-home { grid-column: 7 / 10; grid-row: 7 / 10; background: linear-gradient(135deg, rgba(239,68,68,0.3), rgba(16,185,129,0.3), rgba(245,158,11,0.3), rgba(59,130,246,0.3)); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.95rem; }
+    .track-red { background: rgba(239, 68, 68, 0.45) !important; }
+    .track-green { background: rgba(16, 185, 129, 0.45) !important; }
+    .track-yellow { background: rgba(245, 158, 11, 0.45) !important; }
+    .track-blue { background: rgba(59, 130, 246, 0.45) !important; }
+    .safe-spot::after { content: "★"; color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; }
+    .ludo-token { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.7); cursor: pointer; z-index: 10; }
+    .ludo-token.selectable { transform: scale(1.35); box-shadow: 0 0 10px #fff; }
+    .t-red { background: var(--red); }
+    .t-green { background: var(--green); }
+    .t-yellow { background: var(--yellow); }
+    .t-blue { background: var(--blue); }
   </style>
 </head>
 <body>
 
-  <header class="hero">
-    <h1>Let's Play</h1>
-    <p>Minimal, fluid, real-time multiplayer board games. No installation required.</p>
-  </header>
+  <!-- VIEW 1: HUB -->
+  <section id="viewHub" class="view-screen active">
+    <header class="hero">
+      <h1>Let's Play</h1>
+      <p>Instant 4-digit room multiplayer. Connect phone to PC or play across friends.</p>
+    </header>
 
-  <main class="games-grid">
-    <!-- BINGO -->
-    <div class="glass-panel game-card">
-      <div>
-        <span class="game-icon">🎱</span>
-        <h2 class="game-title">Bingo Classic</h2>
-        <p class="game-desc">The authentic 5x5 grid game. Take turns calling numbers, complete rows or diagonals, and strike B-I-N-G-O first.</p>
+    <main class="games-grid">
+      <div class="glass-panel game-card">
+        <div>
+          <span class="game-icon">🎱</span>
+          <h2 style="font-size:1.4rem; margin-bottom:8px;">Bingo Classic</h2>
+          <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:20px;">5x5 line cross sync. Turn-based number calls.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openLobby('bingo')">Play Bingo</button>
       </div>
-      <a href="bingo/index.html" class="btn btn-primary">Play Bingo</a>
-    </div>
 
-    <!-- SNAKES & LADDERS -->
-    <div class="glass-panel game-card">
-      <div>
-        <span class="game-icon">🪜</span>
-        <h2 class="game-title">Snakes & Ladders</h2>
-        <p class="game-desc">A 100-step race against friends. Roll the dice, ride the high ladders, and dodge the treacherous snakes to tile 100.</p>
+      <div class="glass-panel game-card">
+        <div>
+          <span class="game-icon">🪜</span>
+          <h2 style="font-size:1.4rem; margin-bottom:8px;">Snakes & Ladders</h2>
+          <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:20px;">Race to 100 with synchronized dice and snake bites.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openLobby('snakes')">Play Snakes & Ladders</button>
       </div>
-      <a href="snake-and-ladder/index.html" class="btn btn-primary">Play Snakes & Ladders</a>
-    </div>
 
-    <!-- LUDO -->
-    <div class="glass-panel game-card">
-      <div>
-        <span class="game-icon">🎲</span>
-        <h2 class="game-title">Ludo Star</h2>
-        <p class="game-desc">Fast-paced 4-token strategy. Roll sixes to emerge, knock opponent tokens back to base, and lead all four tokens Home.</p>
+      <div class="glass-panel game-card">
+        <div>
+          <span class="game-icon">🎲</span>
+          <h2 style="font-size:1.4rem; margin-bottom:8px;">Ludo Star</h2>
+          <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:20px;">Roll 6 to emerge from base. Sync token moves across devices.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openLobby('ludo')">Play Ludo</button>
       </div>
-      <a href="ludo/index.html" class="btn btn-primary">Play Ludo</a>
-    </div>
-  </main>
+    </main>
+  </section>
 
+  <!-- 4-DIGIT LOBBY MODAL -->
+  <div id="lobbyModal" class="lobby-modal">
+    <div class="lobby-card">
+      <h3 id="lobbyTitle" style="margin-bottom:8px; font-size:1.3rem;">Game Lobby</h3>
+      <p style="color:var(--text-secondary); font-size:0.88rem; margin-bottom:20px;">Use any 4-digit code to connect</p>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <button class="btn btn-primary full-width" onclick="hostWithRandomCode()">Host (Generate 4-Digit Code)</button>
+        <div style="color:var(--text-secondary); font-size:0.8rem;">— OR ENTER CODE —</div>
+        <input type="number" id="inputRoomCode" placeholder="4-Digit Code (e.g. 5821)" style="padding:12px; border-radius:8px; border:1px solid var(--border-glass); background:rgba(0,0,0,0.5); color:#fff; text-align:center; font-size:1.1rem; font-weight:700;" />
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary full-width" onclick="hostCustomCode()">Host This Code</button>
+          <button class="btn btn-primary full-width" onclick="joinWithCode()">Join Code</button>
+        </div>
+      </div>
+      <div id="lobbyStatus" style="color:var(--yellow); font-size:0.85rem; margin-top:14px;"></div>
+      <button class="btn btn-secondary" style="margin-top:16px; padding:6px 14px; font-size:0.8rem;" onclick="closeLobby()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- VIEW 2: BINGO -->
+  <section id="viewBingo" class="view-screen">
+    <div class="game-header">
+      <div>ROOM: <strong id="bingoRoomDisp" style="color:var(--accent);">----</strong> (<span id="bingoRoleDisp">--</span>)</div>
+      <button class="btn btn-secondary" onclick="exitToHub()">Exit</button>
+    </div>
+    <div class="bingo-wrapper">
+      <div id="bingoTurnBadge" style="font-weight:700; color:var(--text-secondary); margin-bottom:12px;">Waiting for player to connect...</div>
+      <div class="letters-row">
+        <div id="bLet-0" class="letter-box">B</div>
+        <div id="bLet-1" class="letter-box">I</div>
+        <div id="bLet-2" class="letter-box">N</div>
+        <div id="bLet-3" class="letter-box">G</div>
+        <div id="bLet-4" class="letter-box">O</div>
+      </div>
+      <div id="bingoGrid" class="bingo-grid"></div>
+    </div>
+  </section>
+
+  <!-- VIEW 3: SNAKES & LADDERS -->
+  <section id="viewSnakes" class="view-screen">
+    <div class="game-header">
+      <div>ROOM: <strong id="snakesRoomDisp" style="color:var(--accent);">----</strong> (<span id="snakesRoleDisp">--</span>)</div>
+      <button class="btn btn-secondary" onclick="exitToHub()">Exit</button>
+    </div>
+    <div class="game-layout">
+      <div id="snakesBoard" class="snakes-board"></div>
+      <div class="glass-panel hud-panel">
+        <div id="snakesTurnBadge" style="font-weight:700; color:var(--text-secondary);">Waiting for player...</div>
+        <div style="display:flex; justify-content:space-around;">
+          <div>🔵 P1: <strong id="p1Pos">1</strong></div>
+          <div>🔴 P2: <strong id="p2Pos">1</strong></div>
+        </div>
+        <div>
+          <div id="snakesDiceCube" class="dice-cube">⚀</div>
+          <button id="snakesRollBtn" class="btn btn-primary full-width" onclick="onSnakesRoll()">Roll Dice</button>
+        </div>
+        <div id="snakesLog" style="font-size:0.85rem; color:var(--text-secondary); max-height:100px; overflow-y:auto;">Awaiting match start...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VIEW 4: LUDO -->
+  <section id="viewLudo" class="view-screen">
+    <div class="game-header">
+      <div>ROOM: <strong id="ludoRoomDisp" style="color:var(--accent);">----</strong> (<span id="ludoRoleDisp">--</span>)</div>
+      <button class="btn btn-secondary" onclick="exitToHub()">Exit</button>
+    </div>
+    <div class="game-layout">
+      <div id="ludoBoard" class="ludo-board">
+        <div class="base-red"><div class="base-inner"><div class="home-pocket" id="lp-red-0"></div><div class="home-pocket" id="lp-red-1"></div><div class="home-pocket" id="lp-red-2"></div><div class="home-pocket" id="lp-red-3"></div></div></div>
+        <div class="base-green"><div class="base-inner"><div class="home-pocket" id="lp-green-0"></div><div class="home-pocket" id="lp-green-1"></div><div class="home-pocket" id="lp-green-2"></div><div class="home-pocket" id="lp-green-3"></div></div></div>
+        <div class="base-blue"><div class="base-inner"><div class="home-pocket" id="lp-blue-0"></div><div class="home-pocket" id="lp-blue-1"></div><div class="home-pocket" id="lp-blue-2"></div><div class="home-pocket" id="lp-blue-3"></div></div></div>
+        <div class="base-yellow"><div class="base-inner"><div class="home-pocket" id="lp-yellow-0"></div><div class="home-pocket" id="lp-yellow-1"></div><div class="home-pocket" id="lp-yellow-2"></div><div class="home-pocket" id="lp-yellow-3"></div></div></div>
+        <div class="center-home">HOME</div>
+      </div>
+      <div class="glass-panel hud-panel">
+        <div id="ludoTurnBadge" style="font-weight:700; color:var(--text-secondary);">Waiting for connection...</div>
+        <div>
+          <div id="ludoDiceCube" class="dice-cube">⚀</div>
+          <button id="ludoRollBtn" class="btn btn-primary full-width" onclick="onLudoRoll()">Roll Dice</button>
+        </div>
+        <div id="ludoLog" style="font-size:0.85rem; color:var(--text-secondary); max-height:100px; overflow-y:auto;">Roll 6 to launch tokens!</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PEER-TO-PEER ENGINE & GAME LOGIC -->
+  <script>
+    let activeGame = null;
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+    let playerRole = 1; // 1 = Host, 2 = Guest
+    let currentTurn = 1;
+    let roomCode = "";
+
+    function openLobby(game) {
+      activeGame = game;
+      document.getElementById('lobbyTitle').innerText = `${game.toUpperCase()} Lobby`;
+      document.getElementById('lobbyStatus').innerText = '';
+      document.getElementById('inputRoomCode').value = '';
+      document.getElementById('lobbyModal').classList.add('active');
+    }
+    function closeLobby() { document.getElementById('lobbyModal').classList.remove('active'); }
+
+    function switchScreen(screenId) {
+      document.querySelectorAll('.view-screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+      closeLobby();
+    }
+
+    function exitToHub() {
+      if (conn) conn.close();
+      if (peer) peer.destroy();
+      switchScreen('viewHub');
+    }
+
+    // --- PEERJS 4-DIGIT NETWORKING ---
+    const PEER_PREFIX = "letsplay_hub_v1_";
+
+    function hostWithRandomCode() {
+      const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+      setupHost(randomCode);
+    }
+    function hostCustomCode() {
+      const code = document.getElementById('inputRoomCode').value.trim();
+      if (code.length < 4) return alert("Please enter a 4-digit code");
+      setupHost(code);
+    }
+
+    function setupHost(code) {
+      roomCode = code;
+      isHost = true;
+      playerRole = 1;
+      document.getElementById('lobbyStatus').innerText = `Hosting Room: ${code}. Waiting for guest...`;
+
+      if (peer) peer.destroy();
+      peer = new Peer(PEER_PREFIX + code);
+
+      peer.on('open', (id) => {
+        document.getElementById('lobbyStatus').innerText = `Room Code: ${code} active! Tell player 2 to join.`;
+      });
+
+      peer.on('connection', (c) => {
+        conn = c;
+        setupConnectionHandlers();
+        launchGameView();
+      });
+
+      peer.on('error', (err) => {
+        document.getElementById('lobbyStatus').innerText = "Code in use or connection issue. Try another 4-digit code.";
+      });
+    }
+
+    function joinWithCode() {
+      const code = document.getElementById('inputRoomCode').value.trim();
+      if (code.length < 4) return alert("Enter the 4-digit code from the host");
+      roomCode = code;
+      isHost = false;
+      playerRole = 2;
+      document.getElementById('lobbyStatus').innerText = `Connecting to ${code}...`;
+
+      if (peer) peer.destroy();
+      peer = new Peer();
+
+      peer.on('open', () => {
+        conn = peer.connect(PEER_PREFIX + code);
+        setupConnectionHandlers();
+      });
+
+      peer.on('error', (err) => {
+        document.getElementById('lobbyStatus').innerText = "Could not find room with this code.";
+      });
+    }
+
+    function setupConnectionHandlers() {
+      conn.on('open', () => {
+        launchGameView();
+      });
+
+      conn.on('data', (data) => {
+        handleIncomingMessage(data);
+      });
+
+      conn.on('close', () => {
+        alert("Player disconnected!");
+        exitToHub();
+      });
+    }
+
+    function sendNetMessage(payload) {
+      if (conn && conn.open) conn.send(payload);
+    }
+
+    function launchGameView() {
+      if (activeGame === 'bingo') {
+        switchScreen('viewBingo');
+        document.getElementById('bingoRoomDisp').innerText = roomCode;
+        document.getElementById('bingoRoleDisp').innerText = playerRole === 1 ? 'Player 1 (Host)' : 'Player 2 (Guest)';
+        initBingo();
+      } else if (activeGame === 'snakes') {
+        switchScreen('viewSnakes');
+        document.getElementById('snakesRoomDisp').innerText = roomCode;
+        document.getElementById('snakesRoleDisp').innerText = playerRole === 1 ? 'Player 1 (Host)' : 'Player 2 (Guest)';
+        initSnakes();
+      } else if (activeGame === 'ludo') {
+        switchScreen('viewLudo');
+        document.getElementById('ludoRoomDisp').innerText = roomCode;
+        document.getElementById('ludoRoleDisp').innerText = playerRole === 1 ? 'Player 1 (Red)' : 'Player 2 (Green)';
+        initLudo();
+      }
+    }
+
+    function handleIncomingMessage(msg) {
+      if (msg.game === 'bingo') syncBingoIncoming(msg);
+      if (msg.game === 'snakes') syncSnakesIncoming(msg);
+      if (msg.game === 'ludo') syncLudoIncoming(msg);
+    }
+
+    // ==========================================
+    // 1. MULTIPLAYER BINGO
+    // ==========================================
+    let bingoNumbers = [];
+    let bingoMarked = new Set();
+
+    function initBingo() {
+      bingoMarked.clear();
+      currentTurn = 1;
+      bingoNumbers = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+      renderBingoBoard();
+      updateBingoTurnUI();
+    }
+
+    function renderBingoBoard() {
+      const grid = document.getElementById('bingoGrid');
+      grid.innerHTML = '';
+      bingoNumbers.forEach((num) => {
+        const cell = document.createElement('div');
+        cell.className = 'bingo-cell';
+        cell.innerText = num;
+        if (bingoMarked.has(num)) cell.classList.add('selected');
+        cell.onclick = () => onBingoCellClick(num);
+        grid.appendChild(cell);
+      });
+      evaluateBingoLines();
+    }
+
+    function onBingoCellClick(num) {
+      if (currentTurn !== playerRole) return alert("Wait for your turn!");
+      if (bingoMarked.has(num)) return;
+
+      bingoMarked.add(num);
+      currentTurn = currentTurn === 1 ? 2 : 1;
+      renderBingoBoard();
+      updateBingoTurnUI();
+
+      sendNetMessage({ game: 'bingo', action: 'pick', number: num, nextTurn: currentTurn });
+    }
+
+    function syncBingoIncoming(msg) {
+      if (msg.action === 'pick') {
+        bingoMarked.add(msg.number);
+        currentTurn = msg.nextTurn;
+        renderBingoBoard();
+        updateBingoTurnUI();
+      }
+    }
+
+    function updateBingoTurnUI() {
+      const badge = document.getElementById('bingoTurnBadge');
+      if (currentTurn === playerRole) {
+        badge.innerText = "YOUR TURN! Pick a number.";
+        badge.style.color = "var(--green)";
+      } else {
+        badge.innerText = `Player ${currentTurn}'s Turn...`;
+        badge.style.color = "var(--text-secondary)";
+      }
+    }
+
+    function evaluateBingoLines() {
+      let lines = 0;
+      const bools = bingoNumbers.map(n => bingoMarked.has(n));
+      for (let r = 0; r < 5; r++) if ([0,1,2,3,4].every(c => bools[r*5 + c])) lines++;
+      for (let c = 0; c < 5; c++) if ([0,1,2,3,4].every(r => bools[r*5 + c])) lines++;
+      if ([0,6,12,18,24].every(i => bools[i])) lines++;
+      if ([4,8,12,16,20].every(i => bools[i])) lines++;
+
+      for (let i = 0; i < 5; i++) document.getElementById(`bLet-${i}`).classList.toggle('active', i < lines);
+      if (lines >= 5) setTimeout(() => alert('🎉 B-I-N-G-O! 5 lines completed!'), 200);
+    }
+
+    // ==========================================
+    // 2. MULTIPLAYER SNAKES & LADDERS
+    // ==========================================
+    const sJumps = { 4:14, 9:31, 20:38, 28:84, 40:59, 51:67, 63:81, 71:91, 17:7, 54:34, 62:18, 64:60, 87:24, 93:73, 95:75, 99:78 };
+    let sPos = { 1: 1, 2: 1 };
+    let sRolling = false;
+
+    function initSnakes() {
+      sPos = { 1: 1, 2: 1 };
+      currentTurn = 1;
+      const board = document.getElementById('snakesBoard');
+      board.innerHTML = '';
+      for (let row = 9; row >= 0; row--) {
+        const isEven = row % 2 === 1;
+        for (let col = 0; col < 10; col++) {
+          const num = isEven ? (row * 10 + (10 - col)) : (row * 10 + (col + 1));
+          const tile = document.createElement('div');
+          tile.id = `stile-${num}`;
+          tile.className = 'tile';
+          if (sJumps[num] && sJumps[num] > num) tile.classList.add('ladder');
+          if (sJumps[num] && sJumps[num] < num) tile.classList.add('snake');
+          tile.innerHTML = `<span>${num}</span>`;
+          board.appendChild(tile);
+        }
+      }
+      renderSnakesTokens();
+      updateSnakesTurnUI();
+    }
+
+    function renderSnakesTokens() {
+      document.querySelectorAll('.player-token').forEach(t => t.remove());
+      const t1 = document.getElementById(`stile-${sPos[1]}`);
+      const t2 = document.getElementById(`stile-${sPos[2]}`);
+      if (t1) t1.innerHTML += '<span class="player-token token-p1"></span>';
+      if (t2) t2.innerHTML += '<span class="player-token token-p2"></span>';
+      document.getElementById('p1Pos').innerText = sPos[1];
+      document.getElementById('p2Pos').innerText = sPos[2];
+    }
+
+    function onSnakesRoll() {
+      if (sRolling || currentTurn !== playerRole) return;
+      sRolling = true;
+      const roll = Math.floor(Math.random() * 6) + 1;
+      animateDice('snakesDiceCube', roll, () => {
+        let pos = sPos[playerRole];
+        if (pos + roll <= 100) {
+          pos += roll;
+          if (sJumps[pos]) pos = sJumps[pos];
+        }
+        sPos[playerRole] = pos;
+        renderSnakesTokens();
+
+        const nextTurn = currentTurn === 1 ? 2 : 1;
+        currentTurn = nextTurn;
+        sRolling = false;
+        updateSnakesTurnUI();
+
+        sendNetMessage({ game: 'snakes', pNum: playerRole, roll: roll, newPos: pos, nextTurn: nextTurn });
+
+        if (pos === 100) alert(`🏆 Player ${playerRole} Wins!`);
+      });
+    }
+
+    function syncSnakesIncoming(msg) {
+      animateDice('snakesDiceCube', msg.roll, () => {
+        sPos[msg.pNum] = msg.newPos;
+        currentTurn = msg.nextTurn;
+        renderSnakesTokens();
+        updateSnakesTurnUI();
+        if (msg.newPos === 100) alert(`🏆 Player ${msg.pNum} Wins!`);
+      });
+    }
+
+    function updateSnakesTurnUI() {
+      const badge = document.getElementById('snakesTurnBadge');
+      const btn = document.getElementById('snakesRollBtn');
+      if (currentTurn === playerRole) {
+        badge.innerText = "YOUR TURN! Roll Dice";
+        badge.style.color = "var(--green)";
+        btn.disabled = false;
+      } else {
+        badge.innerText = `Waiting for Player ${currentTurn}...`;
+        badge.style.color = "var(--text-secondary)";
+        btn.disabled = true;
+      }
+    }
+
+    // ==========================================
+    // 3. MULTIPLAYER LUDO
+    // ==========================================
+    const lColors = { 1: 'red', 2: 'green' };
+    const lStarts = { red: 0, green: 13 };
+    let lTokens = { red: [-1,-1,-1,-1], green: [-1,-1,-1,-1] };
+    let lLastRoll = null;
+    let lRolling = false;
+
+    const lTrackCoords = [
+      [2,7],[3,7],[4,7],[5,7],[6,7],[7,6],[7,5],[7,4],[7,3],[7,2],[7,1],
+      [8,1],[9,1],[9,2],[9,3],[9,4],[9,5],[9,6],[10,7],[11,7],[12,7],[13,7],[14,7],[15,7],
+      [15,8],[15,9],[14,9],[13,9],[12,9],[11,9],[10,9],[9,10],[9,11],[9,12],[9,13],[9,14],[9,15],
+      [8,15],[7,15],[7,14],[7,13],[7,12],[7,11],[7,10],[6,9],[5,9],[4,9],[3,9],[2,9],[1,9],
+      [1,8],[1,7]
+    ];
+
+    function initLudo() {
+      lTokens = { red: [-1,-1,-1,-1], green: [-1,-1,-1,-1] };
+      currentTurn = 1;
+      const board = document.getElementById('ludoBoard');
+      document.querySelectorAll('.ludo-cell').forEach(c => c.remove());
+      lTrackCoords.forEach(([col, row], idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'ludo-cell';
+        cell.id = `lcell-${idx}`;
+        cell.style.gridColumn = col;
+        cell.style.gridRow = row;
+        if (idx === 0) cell.classList.add('track-red', 'safe-spot');
+        if (idx === 13) cell.classList.add('track-green', 'safe-spot');
+        board.appendChild(cell);
+      });
+      renderLudoTokens();
+      updateLudoTurnUI();
+    }
+
+    function renderLudoTokens() {
+      document.querySelectorAll('.ludo-token').forEach(t => t.remove());
+      ['red', 'green'].forEach(col => {
+        lTokens[col].forEach((pos, idx) => {
+          const t = document.createElement('div');
+          t.className = `ludo-token t-${col}`;
+          t.onclick = () => onLudoTokenClick(col, idx);
+          if (pos === -1) {
+            const p = document.getElementById(`lp-${col}-${idx}`);
+            if (p) p.appendChild(t);
+          } else if (pos < 52) {
+            const c = document.getElementById(`lcell-${pos}`);
+            if (c) c.appendChild(t);
+          }
+        });
+      });
+    }
+
+    function onLudoRoll() {
+      if (lRolling || currentTurn !== playerRole) return;
+      lRolling = true;
+      const roll = Math.floor(Math.random() * 6) + 1;
+      animateDice('ludoDiceCube', roll, () => {
+        lLastRoll = roll;
+        lRolling = false;
+        const myColor = lColors[playerRole];
+        const movable = lTokens[myColor].filter(p => (p === -1 && roll === 6) || p >= 0);
+
+        if (movable.length === 0) {
+          passLudoTurn();
+        } else if (movable.length === 1) {
+          const tIdx = lTokens[myColor].findIndex(p => (p === -1 && roll === 6) || p >= 0);
+          applyLudoMove(myColor, tIdx, roll);
+        } else {
+          document.getElementById('ludoLog').innerText = "Click an eligible token to advance.";
+        }
+      });
+    }
+
+    function onLudoTokenClick(col, idx) {
+      if (col !== lColors[playerRole] || !lLastRoll || currentTurn !== playerRole) return;
+      const pos = lTokens[col][idx];
+      if (pos === -1 && lLastRoll !== 6) return;
+      applyLudoMove(col, idx, lLastRoll);
+    }
+
+    function applyLudoMove(col, idx, roll) {
+      let pos = lTokens[col][idx];
+      if (pos === -1 && roll === 6) pos = lStarts[col];
+      else if (pos >= 0) pos = (pos + roll) % 52;
+      lTokens[col][idx] = pos;
+
+      const nextTurn = roll === 6 ? currentTurn : (currentTurn === 1 ? 2 : 1);
+      currentTurn = nextTurn;
+      lLastRoll = null;
+      renderLudoTokens();
+      updateLudoTurnUI();
+
+      sendNetMessage({ game: 'ludo', tokens: lTokens, roll: roll, nextTurn: nextTurn });
+    }
+
+    function passLudoTurn() {
+      currentTurn = currentTurn === 1 ? 2 : 1;
+      lLastRoll = null;
+      updateLudoTurnUI();
+      sendNetMessage({ game: 'ludo', tokens: lTokens, roll: null, nextTurn: currentTurn });
+    }
+
+    function syncLudoIncoming(msg) {
+      if (msg.roll) {
+        animateDice('ludoDiceCube', msg.roll, () => {
+          lTokens = msg.tokens;
+          currentTurn = msg.nextTurn;
+          renderLudoTokens();
+          updateLudoTurnUI();
+        });
+      } else {
+        currentTurn = msg.nextTurn;
+        updateLudoTurnUI();
+      }
+    }
+
+    function updateLudoTurnUI() {
+      const badge = document.getElementById('ludoTurnBadge');
+      const btn = document.getElementById('ludoRollBtn');
+      if (currentTurn === playerRole) {
+        badge.innerText = "YOUR TURN! Roll Dice";
+        badge.style.color = "var(--green)";
+        btn.disabled = false;
+      } else {
+        badge.innerText = `Waiting for Player ${currentTurn}...`;
+        badge.style.color = "var(--text-secondary)";
+        btn.disabled = true;
+      }
+    }
+
+    // Common Dice Animation
+    function animateDice(elemId, rollVal, cb) {
+      const cube = document.getElementById(elemId);
+      const pips = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+      cube.classList.add('rolling');
+      setTimeout(() => {
+        cube.classList.remove('rolling');
+        cube.innerText = pips[rollVal - 1];
+        if (cb) cb();
+      }, 550);
+    }
+  </script>
 </body>
 </html>
