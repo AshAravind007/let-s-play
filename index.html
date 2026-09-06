@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Let's Play — Multiplayer Hub</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    .hero {
+      text-align: center;
+      padding: 60px 20px 40px;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 20px 60px;
+      width: 100%;
+    }
+    .game-card {
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .game-icon {
+      font-size: 3.5rem;
+      margin-bottom: 20px;
+      display: inline-block;
+    }
+    .game-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .game-desc {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="hero">
+    <h1>Let's Play</h1>
+    <p>Minimal, fluid, real-time multiplayer board games. No installation required.</p>
+  </header>
+
+  <main class="games-grid">
+    <!-- BINGO -->
+    <div class="glass-panel game-card">
+      <div>
+        <span class="game-icon">🎱</span>
+        <h2 class="game-title">Bingo Classic</h2>
+        <p class="game-desc">The authentic 5x5 grid game. Take turns calling numbers, complete rows or diagonals, and strike B-I-N-G-O first.</p>
+      </div>
+      <a href="bingo/index.html" class="btn btn-primary">Play Bingo</a>
+    </div>
+
+    <!-- SNAKES & LADDERS -->
+    <div class="glass-panel game-card">
+      <div>
+        <span class="game-icon">🪜</span>
+        <h2 class="game-title">Snakes & Ladders</h2>
+        <p class="game-desc">A 100-step race against friends. Roll the dice, ride the high ladders, and dodge the treacherous snakes to tile 100.</p>
+      </div>
+      <a href="snake-and-ladder/index.html" class="btn btn-primary">Play Snakes & Ladders</a>
+    </div>
+
+    <!-- LUDO -->
+    <div class="glass-panel game-card">
+      <div>
+        <span class="game-icon">🎲</span>
+        <h2 class="game-title">Ludo Star</h2>
+        <p class="game-desc">Fast-paced 4-token strategy. Roll sixes to emerge, knock opponent tokens back to base, and lead all four tokens Home.</p>
+      </div>
+      <a href="ludo/index.html" class="btn btn-primary">Play Ludo</a>
+    </div>
+  </main>
+
+</body>
+</html>
