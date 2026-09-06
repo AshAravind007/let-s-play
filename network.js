@@ -2,12 +2,13 @@
 
 // Replace with your real Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAhaRZwbxfPIW_IniqUGrvnM4P_CGYmRJQ",
+  authDomain: "letsplay-a93ab.firebaseapp.com",
+  projectId: "letsplay-a93ab",
+  storageBucket: "letsplay-a93ab.firebasestorage.app",
+  messagingSenderId: "814616750975",
+  appId: "1:814616750975:web:076ee618549d719196c84a",
+  measurementId: "G-J4J3TWC0X4"
 };
 
 // Global handles
