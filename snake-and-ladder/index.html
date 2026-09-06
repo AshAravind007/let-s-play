@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snakes & Ladders — Let's Play</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    .game-layout {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 32px;
+      padding: 32px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .board-container {
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 1;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 2px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid var(--border-glass);
+      border-radius: 12px;
+      padding: 6px;
+      position: relative;
+    }
+    .tile {
+      background: rgba(30, 41, 59, 0.7);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      position: relative;
+    }
+    .tile.ladder { background: rgba(16, 185, 129, 0.2); border: 1px dashed var(--green); }
+    .tile.snake { background: rgba(239, 68, 68, 0.2); border: 1px dashed var(--red); }
+    
+    .player-token {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px rgba(0,0,0,0.8);
+      position: absolute;
+      bottom: 4px;
+      transition: all 0.4s ease;
+    }
+    .token-p1 { background: #3b82f6; left: 4px; }
+    .token-p2 { background: #ec4899; right: 4px; }
+
+    .hud-panel {
+      flex: 1;
+      min-width: 280px;
+      max-width: 360px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: fit-content;
+    }
+    .status-badge {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-align: center;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-layout">
+    <!-- 1-100 SERPENTINE BOARD -->
+    <div id="board" class="board-container"></div>
+
+    <!-- CONTROLS & HUD -->
+    <div class="glass-panel hud-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:1.25rem;">Snakes & Ladders</h2>
+        <a href="../index.html" class="link-btn" style="color:var(--text-secondary);">✕ Exit</a>
+      </div>
+
+      <div id="status" class="status-badge">Player 1's Turn</div>
+
+      <div style="display:flex; gap:16px; justify-content:space-around;">
+        <div>🔵 Player 1: <strong id="p1Pos">1</strong></div>
+        <div>🔴 Player 2: <strong id="p2Pos">1</strong></div>
+      </div>
+
+      <div id="diceSlot"></div>
+
+      <div id="gameLog" style="font-size: 0.85rem; color: var(--text-secondary); max-height: 140px; overflow-y: auto;">
+        Welcome! Roll to start your ascent.
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Dice } from '../shared/dice.js';
+
+    const JUMPS = {
+      // Ladders (Start -> End)
+      4: 14, 9: 31, 20: 38, 28: 84, 40: 59, 51: 67, 63: 81, 71: 91,
+      // Snakes (Head -> Tail)
+      17: 7, 54: 34, 62: 18, 64: 60, 87: 24, 93: 73, 95: 75, 99: 78
+    };
+
+    let p1 = 1;
+    let p2 = 1;
+    let turn = 1; // 1 or 2
+
+    // Construct 100 to 1 Serpentine Board
+    const board = document.getElementById('board');
+    function buildBoard() {
+      board.innerHTML = '';
+      for (let row = 9; row >= 0; row--) {
+        const isEvenRow = row % 2 === 1;
+        for (let col = 0; col < 10; col++) {
+          const num = isEvenRow ? (row * 10 + (10 - col)) : (row * 10 + (col + 1));
+          const tile = document.createElement('div');
+          tile.id = `tile-${num}`;
+          tile.className = 'tile';
+          if (JUMPS[num] && JUMPS[num] > num) tile.classList.add('ladder');
+          if (JUMPS[num] && JUMPS[num] < num) tile.classList.add('snake');
+
+          tile.innerHTML = `<span>${num}</span>`;
+          board.appendChild(tile);
+        }
+      }
+      renderTokens();
+    }
+
+    function renderTokens() {
+      document.querySelectorAll('.player-token').forEach(el => el.remove());
+      const t1 = document.getElementById(`tile-${p1}`);
+      const t2 = document.getElementById(`tile-${p2}`);
+      if (t1) t1.innerHTML += `<span class="player-token token-p1"></span>`;
+      if (t2) t2.innerHTML += `<span class="player-token token-p2"></span>`;
+      document.getElementById('p1Pos').innerText = p1;
+      document.getElementById('p2Pos').innerText = p2;
+    }
+
+    function log(msg) {
+      const el = document.getElementById('gameLog');
+      el.innerHTML = `<div>• ${msg}</div>` + el.innerHTML;
+    }
+
+    // Attach Dice
+    const dice = new Dice('diceSlot', (val) => {
+      let currentPos = turn === 1 ? p1 : p2;
+      let target = currentPos + val;
+
+      if (target <= 100) {
+        currentPos = target;
+        log(`Player ${turn} rolled ${val} ➔ moved to ${currentPos}`);
+        
+        // Check Snake or Ladder
+        if (JUMPS[currentPos]) {
+          const jumped = JUMPS[currentPos];
+          if (jumped > currentPos) {
+            log(`🎉 Ladder climb for Player ${turn}! ${currentPos} ➔ ${jumped}`);
+          } else {
+            log(`💥 Snake bite for Player ${turn}! ${currentPos} ➔ ${jumped}`);
+          }
+          currentPos = jumped;
+        }
+      } else {
+        log(`Player ${turn} needs exact roll to finish!`);
+      }
+
+      if (turn === 1) p1 = currentPos;
+      else p2 = currentPos;
+
+      renderTokens();
+
+      if (currentPos === 100) {
+        alert(`🏆 Player ${turn} Wins!`);
+        p1 = 1; p2 = 1;
+        renderTokens();
+      }
+
+      turn = turn === 1 ? 2 : 1;
+      document.getElementById('status').innerText = `Player ${turn}'s Turn`;
+    });
+
+    buildBoard();
+  </script>
+</body>
+</html>
