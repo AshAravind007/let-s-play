@@ -3,36 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bingo Classic — Let's Play</title>
+  <title>Bingo Classic — Multiplayer</title>
   <link rel="stylesheet" href="../style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
   <style>
-    .bingo-wrapper {
-      max-width: 500px;
-      margin: 40px auto;
-      padding: 0 16px;
-      text-align: center;
-    }
-    .letters-row {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .letter-box {
-      font-size: 1.6rem;
-      font-weight: 800;
-      color: var(--text-secondary);
-      transition: color 0.3s ease;
-    }
-    .letter-box.active {
-      color: var(--accent);
-      text-shadow: 0 0 12px rgba(99, 102, 241, 0.8);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-    }
+    .bingo-wrapper { max-width: 480px; margin: 30px auto; padding: 0 16px; text-align: center; }
+    .letters-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+    .letter-box { font-size: 1.6rem; font-weight: 800; color: var(--text-secondary); }
+    .letter-box.active { color: var(--accent); text-shadow: 0 0 12px rgba(99, 102, 241, 0.8); }
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
     .cell {
       aspect-ratio: 1;
       background: var(--bg-card);
@@ -45,28 +29,39 @@
       font-weight: 700;
       cursor: pointer;
       user-select: none;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s ease;
     }
-    .cell:hover {
-      border-color: var(--border-glow);
-      transform: scale(1.03);
-    }
-    .cell.selected {
-      background: var(--accent-gradient);
-      border-color: transparent;
-      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
-    }
+    .cell:hover { border-color: var(--border-glow); transform: scale(1.03); }
+    .cell.selected { background: var(--accent-gradient); border-color: transparent; }
+    .lobby-overlay { position: fixed; inset: 0; background: rgba(10, 14, 26, 0.95); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+    .lobby-card { background: var(--bg-card); border: 1px solid var(--border-glow); padding: 32px; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; }
   </style>
 </head>
 <body>
 
+  <!-- LOBBY OVERLAY -->
+  <div id="lobbyScreen" class="lobby-overlay">
+    <div class="lobby-card">
+      <span style="font-size: 3rem;">🎱</span>
+      <h2 style="margin: 12px 0 6px;">Bingo Classic</h2>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:24px;">Multiplayer Room Lobby</p>
+      <button id="btnCreate" class="btn btn-primary full-width" style="margin-bottom: 16px;">Create Room</button>
+      <div style="margin: 12px 0; color:var(--text-secondary); font-size: 0.85rem;">— OR JOIN WITH CODE —</div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="inputRoomCode" class="input-field" placeholder="CODE" style="text-transform:uppercase; text-align:center; font-weight:700;" />
+        <button id="btnJoin" class="btn btn-secondary">Join</button>
+      </div>
+      <div id="lobbyError" style="color:var(--red); font-size:0.85rem; margin-top:12px;"></div>
+    </div>
+  </div>
+
   <div class="bingo-wrapper">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px;">
-      <h2>Bingo Classic</h2>
-      <a href="../index.html" class="btn btn-secondary" style="padding:6px 14px; font-size:0.85rem;">Exit</a>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+      <div>ROOM: <strong id="displayRoomCode" style="color:var(--accent);">----</strong></div>
+      <div id="turnBadge" style="font-weight:700; color:var(--text-secondary);">Waiting...</div>
+      <a href="../index.html" class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;">Exit</a>
     </div>
 
-    <!-- B-I-N-G-O STRIKE TRACKER -->
     <div class="letters-row">
       <div id="let-0" class="letter-box">B</div>
       <div id="let-1" class="letter-box">I</div>
@@ -75,60 +70,115 @@
       <div id="let-4" class="letter-box">O</div>
     </div>
 
-    <!-- 5x5 BOARD -->
     <div id="bingoGrid" class="grid"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { createRoom, joinRoom, subscribeToRoom, broadcastState } from '../shared/network.js';
+
+    let myPlayerNum = null;
+    let currentTurn = 1;
     let board = [];
-    let selected = Array(25).fill(false);
+    let markedNumbers = new Set();
 
     function initBoard() {
       const numbers = Array.from({length: 25}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
       board = numbers;
+      renderGrid();
+    }
+
+    function renderGrid() {
       const grid = document.getElementById('bingoGrid');
       grid.innerHTML = '';
-
-      numbers.forEach((val, idx) => {
+      board.forEach((val, idx) => {
         const cell = document.createElement('div');
         cell.className = 'cell';
         cell.innerText = val;
-        cell.onclick = () => toggleCell(idx, cell);
+        if (markedNumbers.has(val)) cell.classList.add('selected');
+        cell.onclick = () => onCellClicked(val);
         grid.appendChild(cell);
       });
+      evaluateLines();
     }
 
-    function toggleCell(idx, cell) {
-      selected[idx] = !selected[idx];
-      cell.classList.toggle('selected', selected[idx]);
-      evaluateLines();
+    async function onCellClicked(val) {
+      if (currentTurn !== myPlayerNum) {
+        alert("It is not your turn!");
+        return;
+      }
+      if (markedNumbers.has(val)) return;
+
+      const nextTurn = currentTurn === 1 ? 2 : 1;
+      await broadcastState({
+        turn: nextTurn,
+        "state.lastPicked": val
+      });
     }
 
     function evaluateLines() {
       let lines = 0;
+      const selectedIndices = board.map(n => markedNumbers.has(n));
 
-      // 5 Rows
-      for (let r = 0; r < 5; r++) {
-        if ([0,1,2,3,4].every(c => selected[r * 5 + c])) lines++;
-      }
-      // 5 Columns
-      for (let c = 0; c < 5; c++) {
-        if ([0,1,2,3,4].every(r => selected[r * 5 + c])) lines++;
-      }
-      // 2 Diagonals
-      if ([0, 6, 12, 18, 24].every(i => selected[i])) lines++;
-      if ([4, 8, 12, 16, 20].every(i => selected[i])) lines++;
+      for (let r = 0; r < 5; r++) if ([0,1,2,3,4].every(c => selectedIndices[r * 5 + c])) lines++;
+      for (let c = 0; c < 5; c++) if ([0,1,2,3,4].every(r => selectedIndices[r * 5 + c])) lines++;
+      if ([0, 6, 12, 18, 24].every(i => selectedIndices[i])) lines++;
+      if ([4, 8, 12, 16, 20].every(i => selectedIndices[i])) lines++;
 
       for (let i = 0; i < 5; i++) {
         document.getElementById(`let-${i}`).classList.toggle('active', i < lines);
       }
 
       if (lines >= 5) {
-        setTimeout(() => alert('🎉 B-I-N-G-O! You completed 5 lines!'), 200);
+        setTimeout(() => alert('🎉 B-I-N-G-O! You reached 5 lines!'), 200);
       }
     }
 
-    initBoard();
+    function handleRoomUpdate(data) {
+      if (!data) return;
+      currentTurn = data.turn;
+
+      if (data.state && data.state.lastPicked) {
+        markedNumbers.add(data.state.lastPicked);
+        renderGrid();
+      }
+
+      const badge = document.getElementById('turnBadge');
+      if (currentTurn === myPlayerNum) {
+        badge.innerText = "YOUR TURN (Pick a number)";
+        badge.style.color = "var(--green)";
+      } else {
+        badge.innerText = `Waiting for Player ${currentTurn}...`;
+        badge.style.color = "var(--text-secondary)";
+      }
+    }
+
+    document.getElementById('btnCreate').onclick = async () => {
+      try {
+        const res = await createRoom("bingo", { lastPicked: null });
+        myPlayerNum = res.playerNumber;
+        document.getElementById('displayRoomCode').innerText = res.roomId;
+        document.getElementById('lobbyScreen').style.display = 'none';
+        initBoard();
+        subscribeToRoom(res.roomId, handleRoomUpdate);
+      } catch (err) {
+        document.getElementById('lobbyError').innerText = err.message;
+      }
+    };
+
+    document.getElementById('btnJoin').onclick = async () => {
+      const code = document.getElementById('inputRoomCode').value;
+      if (!code) return;
+      try {
+        const res = await joinRoom(code, {});
+        myPlayerNum = res.playerNumber;
+        document.getElementById('displayRoomCode').innerText = res.roomId;
+        document.getElementById('lobbyScreen').style.display = 'none';
+        initBoard();
+        subscribeToRoom(res.roomId, handleRoomUpdate);
+      } catch (err) {
+        document.getElementById('lobbyError').innerText = err.message;
+      }
+    };
   </script>
 </body>
 </html>
